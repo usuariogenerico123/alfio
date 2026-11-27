@@ -40,7 +40,10 @@ export function DashboardPage() {
     void loadPortfolio()
   }, [loadPortfolio])
 
-  const handleConfirmPurchase = async (product: ProductCatalogItem) => {
+  const handleConfirmPurchase = async (
+    product: ProductCatalogItem,
+    order: { orderId: string; memo: string },
+  ) => {
     if (!wallet.walletAddress) return
     setIsSubmittingPurchase(true)
     setFeedback(null)
@@ -49,7 +52,7 @@ export function DashboardPage() {
       const payment = await wallet.payUsdc({
         destination: product.storeWallet,
         amount: product.downPaymentUsdc.toFixed(2),
-        memo: `ALFIO-50-${product.id.toUpperCase()}`,
+        memo: order.memo,
       })
 
       if (!payment.ok) {
@@ -58,6 +61,14 @@ export function DashboardPage() {
           text: payment.error ?? 'No se pudo realizar el pago del 50% inicial.',
         })
         return
+      }
+
+      if (payment.hash) {
+        try {
+          await alfioApi.confirmStellarOrderPayment(order.orderId, payment.hash)
+        } catch {
+          // Si falla la confirmación directa, el listener de Horizon en el backend actúa como respaldo
+        }
       }
 
       await alfioApi.createCreditPurchase({
@@ -183,6 +194,7 @@ export function DashboardPage() {
 
       <BuyNowModal
         open={buyModalOpen}
+        walletAddress={wallet.walletAddress}
         isSubmitting={isSubmittingPurchase}
         onClose={() => setBuyModalOpen(false)}
         onConfirmPurchase={handleConfirmPurchase}

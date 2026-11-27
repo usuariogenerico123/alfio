@@ -66,3 +66,18 @@ export interface UserPortfolioResponse {
   purchasedProducts: PurchasedProduct[]
   pendingInstallments: PendingInstallment[]
 }
+
+export interface StellarOrderResponse {
+  orderId: string
+  memo: string
+  storeWallet: string
+  downPaymentUsdc: number
+  totalPriceUsdc: number
+}
+
+export interface OrderStatusEvent {
+  orderId: string
+  status: 'accepted' | 'rejected'
+  memo?: string
+  reason?: string
+}

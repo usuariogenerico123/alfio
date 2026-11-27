@@ -1,8 +1,15 @@
 package stellar
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
+)
+
+const (
+	OrderStatusPending  = "pending"
+	OrderStatusAccepted = "accepted"
+	OrderStatusRejected = "rejected"
 )
 
 // ProductSpec coincide con el formato de especificaciones que muestra frontend-owner.
@@ -30,6 +37,14 @@ type OrderAlertEvent struct {
 	CreatedAt             string        `json:"createdAt"`
 }
 
+// OrderStatusEvent avisa al comprador si la tienda aceptó o rechazó su solicitud.
+type OrderStatusEvent struct {
+	OrderID string `json:"orderId"`
+	Status  string `json:"status"`
+	Memo    string `json:"memo,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
 // PaymentConfirmedEvent coincide con PaymentConfirmedEvent en frontend-owner/src/api/types.ts.
 type PaymentConfirmedEvent struct {
 	OrderID        string  `json:"orderId"`
@@ -43,33 +58,53 @@ type PaymentConfirmedEvent struct {
 	PaidAt         string  `json:"paidAt"`
 }
 
-// trackedOrder protege con atomic.Bool que una orden se acepte/pague una sola vez.
+// trackedOrder protege de forma concurrente el ciclo de vida de una orden (pendiente -> aceptada/rechazada -> pagada).
 type trackedOrder struct {
-	event    OrderAlertEvent
-	accepted atomic.Bool
-	paid     atomic.Bool
+	event            OrderAlertEvent
+	mu               sync.Mutex
+	status           string
+	reason           string
+	confirmedPayment *PaymentConfirmedEvent
+	accepted         atomic.Bool
+	paid             atomic.Bool
 }
 
-// EventHub coordina de forma concurrente y segura los streams SSE de órdenes y pagos.
+func (o *trackedOrder) IsAccepted() bool {
+	return o.accepted.Load()
+}
+
+// EventHub coordina de forma concurrente y segura los streams SSE del comprador y de la tienda.
 type EventHub struct {
-	mu               sync.RWMutex
-	orderSubscribers map[chan OrderAlertEvent]struct{}
-	paySubscribers   map[string]map[chan PaymentConfirmedEvent]struct{}
-	orders           map[string]*trackedOrder
+	mu                sync.RWMutex
+	orderSubscribers  map[chan OrderAlertEvent]string
+	statusSubscribers map[string]map[chan OrderStatusEvent]struct{}
+	paySubscribers    map[string]map[chan PaymentConfirmedEvent]struct{}
+	orders            map[string]*trackedOrder
 }
 
 func NewEventHub() *EventHub {
 	return &EventHub{
-		orderSubscribers: make(map[chan OrderAlertEvent]struct{}),
-		paySubscribers:   make(map[string]map[chan PaymentConfirmedEvent]struct{}),
-		orders:           make(map[string]*trackedOrder),
+		orderSubscribers:  make(map[chan OrderAlertEvent]string),
+		statusSubscribers: make(map[string]map[chan OrderStatusEvent]struct{}),
+		paySubscribers:    make(map[string]map[chan PaymentConfirmedEvent]struct{}),
+		orders:            make(map[string]*trackedOrder),
 	}
 }
 
-func (h *EventHub) SubscribeOrders() (chan OrderAlertEvent, func()) {
+func (h *EventHub) GetOrder(orderID string) *trackedOrder {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.orders[orderID]
+}
+
+// SubscribeOrders suscribe a una tienda para recibir alertas de órdenes nuevas.
+// Si storeWallet es vacío, recibe todas las órdenes; si se especifica, filtra solo las de esa wallet.
+func (h *EventHub) SubscribeOrders(storeWallet string) (chan OrderAlertEvent, func()) {
 	ch := make(chan OrderAlertEvent, 16)
+	normalizedWallet := strings.ToUpper(strings.TrimSpace(storeWallet))
+
 	h.mu.Lock()
-	h.orderSubscribers[ch] = struct{}{}
+	h.orderSubscribers[ch] = normalizedWallet
 	h.mu.Unlock()
 
 	return ch, func() {
@@ -81,9 +116,17 @@ func (h *EventHub) SubscribeOrders() (chan OrderAlertEvent, func()) {
 }
 
 func (h *EventHub) PublishOrder(ev OrderAlertEvent) {
+	evStoreWallet := strings.ToUpper(strings.TrimSpace(ev.StoreWallet))
+
 	h.mu.Lock()
-	h.orders[ev.OrderID] = &trackedOrder{event: ev}
-	for ch := range h.orderSubscribers {
+	h.orders[ev.OrderID] = &trackedOrder{
+		event:  ev,
+		status: OrderStatusPending,
+	}
+	for ch, filterWallet := range h.orderSubscribers {
+		if filterWallet != "" && evStoreWallet != "" && filterWallet != evStoreWallet {
+			continue
+		}
 		select {
 		case ch <- ev:
 		default:
@@ -92,6 +135,49 @@ func (h *EventHub) PublishOrder(ev OrderAlertEvent) {
 	h.mu.Unlock()
 }
 
+// SubscribeOrderStatus suscribe al comprador para recibir order_accepted u order_rejected.
+// Si la tienda ya decidió antes de que el SSE conectara, devuelve el snapshot inmediato para evitar race conditions.
+func (h *EventHub) SubscribeOrderStatus(orderID string) (chan OrderStatusEvent, *OrderStatusEvent, func()) {
+	ch := make(chan OrderStatusEvent, 4)
+
+	h.mu.Lock()
+	if ord, ok := h.orders[orderID]; ok {
+		ord.mu.Lock()
+		if ord.status == OrderStatusAccepted || ord.status == OrderStatusRejected {
+			snapshot := &OrderStatusEvent{
+				OrderID: ord.event.OrderID,
+				Status:  ord.status,
+				Memo:    ord.event.Memo,
+				Reason:  ord.reason,
+			}
+			ord.mu.Unlock()
+			h.mu.Unlock()
+			close(ch)
+			return ch, snapshot, func() {}
+		}
+		ord.mu.Unlock()
+	}
+
+	if h.statusSubscribers[orderID] == nil {
+		h.statusSubscribers[orderID] = make(map[chan OrderStatusEvent]struct{})
+	}
+	h.statusSubscribers[orderID][ch] = struct{}{}
+	h.mu.Unlock()
+
+	return ch, nil, func() {
+		h.mu.Lock()
+		if subs, ok := h.statusSubscribers[orderID]; ok {
+			delete(subs, ch)
+			if len(subs) == 0 {
+				delete(h.statusSubscribers, orderID)
+			}
+		}
+		close(ch)
+		h.mu.Unlock()
+	}
+}
+
+// TryAcceptOrder marca una orden pendiente como aceptada y notifica al SSE del comprador.
 func (h *EventHub) TryAcceptOrder(orderID string) (*trackedOrder, bool) {
 	h.mu.RLock()
 	ord, ok := h.orders[orderID]
@@ -99,23 +185,95 @@ func (h *EventHub) TryAcceptOrder(orderID string) (*trackedOrder, bool) {
 	if !ok {
 		return nil, false
 	}
-	// Swap atómico: solo una goroutine puede aceptar e iniciar la escucha de Horizon
-	if !ord.accepted.CompareAndSwap(false, true) {
+
+	ord.mu.Lock()
+	if ord.status == OrderStatusRejected {
+		ord.mu.Unlock()
 		return ord, false
 	}
+	if ord.status == OrderStatusAccepted {
+		ord.mu.Unlock()
+		return ord, false
+	}
+	ord.status = OrderStatusAccepted
+	ord.accepted.Store(true)
+	ord.mu.Unlock()
+
+	h.broadcastOrderStatus(OrderStatusEvent{
+		OrderID: ord.event.OrderID,
+		Status:  OrderStatusAccepted,
+		Memo:    ord.event.Memo,
+	})
 	return ord, true
 }
 
-func (h *EventHub) SubscribePayment(orderID string) (chan PaymentConfirmedEvent, func()) {
+// RejectOrder marca una orden pendiente como rechazada y notifica al SSE del comprador.
+func (h *EventHub) RejectOrder(orderID, reason string) (*trackedOrder, bool) {
+	h.mu.RLock()
+	ord, ok := h.orders[orderID]
+	h.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+
+	ord.mu.Lock()
+	if ord.status != OrderStatusPending {
+		ord.mu.Unlock()
+		return ord, false
+	}
+	ord.status = OrderStatusRejected
+	ord.reason = strings.TrimSpace(reason)
+	if ord.reason == "" {
+		ord.reason = "La tienda rechazó la solicitud de compra"
+	}
+	finalReason := ord.reason
+	ord.mu.Unlock()
+
+	h.broadcastOrderStatus(OrderStatusEvent{
+		OrderID: ord.event.OrderID,
+		Status:  OrderStatusRejected,
+		Reason:  finalReason,
+	})
+	return ord, true
+}
+
+func (h *EventHub) broadcastOrderStatus(ev OrderStatusEvent) {
+	h.mu.RLock()
+	subs := h.statusSubscribers[ev.OrderID]
+	for ch := range subs {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+	h.mu.RUnlock()
+}
+
+// SubscribePayment suscribe a la tienda para recibir la confirmación de pago (order_paid).
+// Si el pago ya se confirmó antes de conectar el SSE, devuelve el snapshot inmediato.
+func (h *EventHub) SubscribePayment(orderID string) (chan PaymentConfirmedEvent, *PaymentConfirmedEvent, func()) {
 	ch := make(chan PaymentConfirmedEvent, 4)
+
 	h.mu.Lock()
+	if ord, ok := h.orders[orderID]; ok {
+		ord.mu.Lock()
+		if ord.confirmedPayment != nil {
+			snapshot := *ord.confirmedPayment
+			ord.mu.Unlock()
+			h.mu.Unlock()
+			close(ch)
+			return ch, &snapshot, func() {}
+		}
+		ord.mu.Unlock()
+	}
+
 	if h.paySubscribers[orderID] == nil {
 		h.paySubscribers[orderID] = make(map[chan PaymentConfirmedEvent]struct{})
 	}
 	h.paySubscribers[orderID][ch] = struct{}{}
 	h.mu.Unlock()
 
-	return ch, func() {
+	return ch, nil, func() {
 		h.mu.Lock()
 		if subs, ok := h.paySubscribers[orderID]; ok {
 			delete(subs, ch)
@@ -133,6 +291,11 @@ func (h *EventHub) PublishPaymentOnce(ord *trackedOrder, ev PaymentConfirmedEven
 	if !ord.paid.CompareAndSwap(false, true) {
 		return false
 	}
+
+	ord.mu.Lock()
+	copyEv := ev
+	ord.confirmedPayment = &copyEv
+	ord.mu.Unlock()
 
 	h.mu.RLock()
 	subs := h.paySubscribers[ev.OrderID]

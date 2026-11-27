@@ -33,6 +33,8 @@ export let RUTA_CUOTAS_OWNER = API_URL + '/api/v1/cuotas'
 // Rutas Stellar / SSE (tiempo real con Horizon)
 export let RUTA_ACEPTAR_ORDEN = (orderId) =>
   API_URL + `/api/v1/owner/orders/${encodeURIComponent(orderId)}/accept`
+export let RUTA_RECHAZAR_ORDEN = (orderId) =>
+  API_URL + `/api/v1/owner/orders/${encodeURIComponent(orderId)}/reject`
 export let RUTA_SSE_ORDENES = API_URL + SSE_ORDERS_BASE_PATH
 export let RUTA_SSE_PAGOS = (orderId) =>
   API_URL + `${SSE_PAYMENTS_BASE_PATH}/${encodeURIComponent(orderId)}`

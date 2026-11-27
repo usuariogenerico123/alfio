@@ -37,6 +37,7 @@ export function OwnerDashboardPage() {
   const [alertPhase, setAlertPhase] = useState<OrderAlertPhase>('idle')
   const [activeOrder, setActiveOrder] = useState<IncomingOrderEvent | null>(null)
   const [isAccepting, setIsAccepting] = useState(false)
+  const [isRejecting, setIsRejecting] = useState(false)
   const [paidEvent, setPaidEvent] = useState<PaymentConfirmedEvent | null>(null)
 
   const loadDashboard = useCallback(async () => {
@@ -88,6 +89,17 @@ export function OwnerDashboardPage() {
       setAlertPhase('waiting_payment')
     } finally {
       setIsAccepting(false)
+    }
+  }
+
+  const handleRejectOrder = async (order: IncomingOrderEvent) => {
+    setIsRejecting(true)
+    try {
+      await ownerApi.rejectOrder(order.orderId)
+      setAlertPhase('idle')
+      setActiveOrder(null)
+    } finally {
+      setIsRejecting(false)
     }
   }
 
@@ -158,8 +170,10 @@ export function OwnerDashboardPage() {
               phase={alertPhase}
               activeOrder={activeOrder}
               isAccepting={isAccepting}
+              isRejecting={isRejecting}
               isMockSse={!isRemoteApiConfigured}
               onAcceptOrder={(order) => void handleAcceptOrder(order)}
+              onRejectOrder={(order) => void handleRejectOrder(order)}
               onSimulateIncomingOrder={handleSimulateIncomingOrder}
               onSimulatePaymentConfirmed={handleSimulatePaymentConfirmed}
             />

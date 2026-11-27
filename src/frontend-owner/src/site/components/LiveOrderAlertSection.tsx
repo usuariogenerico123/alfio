@@ -1,4 +1,4 @@
-import { BellRing, Check, Clock, Play } from 'lucide-react'
+import { BellRing, Check, Clock, Play, X } from 'lucide-react'
 import type { IncomingOrderEvent } from '../../api/types'
 import { formatUsdc, truncateAddress } from '../utils/formatters'
 
@@ -8,8 +8,10 @@ interface LiveOrderAlertSectionProps {
   phase: OrderAlertPhase
   activeOrder: IncomingOrderEvent | null
   isAccepting: boolean
+  isRejecting: boolean
   isMockSse: boolean
   onAcceptOrder: (order: IncomingOrderEvent) => void
+  onRejectOrder: (order: IncomingOrderEvent) => void
   onSimulateIncomingOrder: () => void
   onSimulatePaymentConfirmed: () => void
 }
@@ -18,8 +20,10 @@ export function LiveOrderAlertSection({
   phase,
   activeOrder,
   isAccepting,
+  isRejecting,
   isMockSse,
   onAcceptOrder,
+  onRejectOrder,
   onSimulateIncomingOrder,
   onSimulatePaymentConfirmed,
 }: LiveOrderAlertSectionProps) {
@@ -140,16 +144,28 @@ export function LiveOrderAlertSection({
             </div>
 
             {phase === 'incoming' ? (
-              <button
-                id="btn-accept-order"
-                type="button"
-                disabled={isAccepting}
-                onClick={() => onAcceptOrder(activeOrder)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-yellow-400 px-5 py-2.5 text-sm font-bold text-neutral-900 shadow-xs transition-colors hover:bg-yellow-300 disabled:opacity-50 cursor-pointer"
-              >
-                <Check className="h-4 w-4" />
-                <span>{isAccepting ? 'Aceptando...' : 'Aceptar'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  id="btn-reject-order"
+                  type="button"
+                  disabled={isAccepting || isRejecting}
+                  onClick={() => onRejectOrder(activeOrder)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 shadow-xs transition-colors hover:bg-red-50 disabled:opacity-50 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                  <span>{isRejecting ? 'Rechazando...' : 'Rechazar'}</span>
+                </button>
+                <button
+                  id="btn-accept-order"
+                  type="button"
+                  disabled={isAccepting || isRejecting}
+                  onClick={() => onAcceptOrder(activeOrder)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-yellow-400 px-5 py-2.5 text-sm font-bold text-neutral-900 shadow-xs transition-colors hover:bg-yellow-300 disabled:opacity-50 cursor-pointer"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>{isAccepting ? 'Aceptando...' : 'Aceptar'}</span>
+                </button>
+              </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-lg border border-yellow-300 bg-white px-3 py-2 text-xs font-semibold text-neutral-800">

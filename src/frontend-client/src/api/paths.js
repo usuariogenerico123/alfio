@@ -35,5 +35,9 @@ export let RUTA_ACTUALIZAR_ESTADO_CUOTA = (cuotaId) =>
 
 export let RUTA_REGISTRAR_PAGO = API_URL + '/api/v1/pagos'
 
-// Ruta Stellar del backend para notificar al dueño por SSE
+// Rutas Stellar / SSE del backend (comprador)
 export let RUTA_CREAR_ORDEN_STELLAR = API_URL + '/api/v1/stellar/orders'
+export let RUTA_SSE_ESTADO_ORDEN = (orderId) =>
+  API_URL + `/api/v1/stellar/orders/${encodeURIComponent(orderId)}/events`
+export let RUTA_CONFIRMAR_PAGO_ORDEN = (orderId) =>
+  API_URL + `/api/v1/stellar/orders/${encodeURIComponent(orderId)}/confirm`

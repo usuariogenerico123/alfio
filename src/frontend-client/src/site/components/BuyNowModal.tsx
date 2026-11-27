@@ -1,21 +1,27 @@
-import { ArrowLeft, Camera, Keyboard, QrCode, Search, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, Camera, CheckCircle2, Clock, Keyboard, Lock, QrCode, Search, X, XCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { alfioApi } from '../../api/alfioApi'
-import type { ProductCatalogItem } from '../../api/types'
+import type { ProductCatalogItem, StellarOrderResponse } from '../../api/types'
 import { formatUsdc } from '../utils/formatters'
 import { QrScanner } from './QrScanner'
 
 interface BuyNowModalProps {
   open: boolean
+  walletAddress: string | null
   isSubmitting: boolean
   onClose: () => void
-  onConfirmPurchase: (product: ProductCatalogItem) => Promise<void>
+  onConfirmPurchase: (
+    product: ProductCatalogItem,
+    order: { orderId: string; memo: string },
+  ) => Promise<void>
 }
 
 type InputMode = 'scan' | 'manual'
+type OrderApprovalPhase = 'idle' | 'requesting' | 'waiting_store' | 'accepted' | 'rejected'
 
 export function BuyNowModal({
   open,
+  walletAddress,
   isSubmitting,
   onClose,
   onConfirmPurchase,
@@ -25,10 +31,24 @@ export function BuyNowModal({
   const [catalog, setCatalog] = useState<ProductCatalogItem[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductCatalogItem | null>(null)
   const [lookupError, setLookupError] = useState<string | null>(null)
+  const [orderPhase, setOrderPhase] = useState<OrderApprovalPhase>('idle')
+  const [activeOrder, setActiveOrder] = useState<StellarOrderResponse | null>(null)
+  const [orderNotice, setOrderNotice] = useState<string | null>(null)
+  const unsubscribeOrderRef = useRef<(() => void) | null>(null)
+
+  const clearOrderSubscription = () => {
+    if (unsubscribeOrderRef.current) {
+      unsubscribeOrderRef.current()
+      unsubscribeOrderRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (!open) return
     void alfioApi.getProductsCatalog().then(setCatalog).catch(() => {})
+    return () => {
+      clearOrderSubscription()
+    }
   }, [open])
 
   if (!open) return null
@@ -46,21 +66,71 @@ export function BuyNowModal({
       setLookupError(`No encontramos un producto para el código "${code}".`)
       return
     }
+    clearOrderSubscription()
+    setOrderPhase('idle')
+    setActiveOrder(null)
+    setOrderNotice(null)
     setQrInput(found.qrCode)
     setSelectedProduct(found)
   }
 
+  const handleRequestStoreApproval = async () => {
+    if (!selectedProduct || !walletAddress) return
+    clearOrderSubscription()
+    setOrderPhase('requesting')
+    setOrderNotice(null)
+
+    try {
+      const createdOrder = await alfioApi.createStellarOrder({
+        product: selectedProduct,
+        buyerWallet: walletAddress,
+      })
+      setActiveOrder(createdOrder)
+      setOrderPhase('waiting_store')
+
+      unsubscribeOrderRef.current = alfioApi.subscribeToOrderStatus(createdOrder.orderId, {
+        onAccepted: (ev) => {
+          setActiveOrder((prev) =>
+            prev ? { ...prev, memo: ev.memo || prev.memo } : prev,
+          )
+          setOrderPhase('accepted')
+          setOrderNotice('La tienda aceptó tu solicitud. Ya puedes pagar el 50% inicial.')
+        },
+        onRejected: (ev) => {
+          setOrderPhase('rejected')
+          setOrderNotice(ev.reason || 'La tienda rechazó la solicitud de compra.')
+        },
+        onError: () => {
+          setOrderNotice('Reconectando con la tienda...')
+        },
+      })
+    } catch (err) {
+      setOrderPhase('idle')
+      setOrderNotice(
+        err instanceof Error ? err.message : 'No se pudo enviar la solicitud a la tienda.',
+      )
+    }
+  }
+
   const handleClose = () => {
+    clearOrderSubscription()
     setMode('scan')
     setQrInput('')
     setSelectedProduct(null)
     setLookupError(null)
+    setOrderPhase('idle')
+    setActiveOrder(null)
+    setOrderNotice(null)
     onClose()
   }
 
   const handleResetScan = () => {
+    clearOrderSubscription()
     setSelectedProduct(null)
     setLookupError(null)
+    setOrderPhase('idle')
+    setActiveOrder(null)
+    setOrderNotice(null)
   }
 
   return (
@@ -279,16 +349,70 @@ export function BuyNowModal({
                   </div>
                 </div>
 
+                {orderPhase === 'waiting_store' && (
+                  <div className="flex items-center gap-2 rounded-xl border border-yellow-300 bg-yellow-50 px-3.5 py-2.5 text-xs font-medium text-neutral-800">
+                    <Clock className="h-4 w-4 shrink-0 text-yellow-600" />
+                    <span>Esperando que la tienda acepte tu solicitud...</span>
+                  </div>
+                )}
+
+                {orderPhase === 'accepted' && (
+                  <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-medium text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>{orderNotice ?? 'La tienda aceptó tu solicitud. Ya puedes pagar.'}</span>
+                  </div>
+                )}
+
+                {orderPhase === 'rejected' && (
+                  <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
+                    <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+                    <span>{orderNotice ?? 'La tienda rechazó tu solicitud.'}</span>
+                  </div>
+                )}
+
+                {orderPhase === 'idle' && orderNotice && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {orderNotice}
+                  </p>
+                )}
+
+                {(orderPhase === 'idle' || orderPhase === 'rejected') && (
+                  <button
+                    id="btn-request-store-approval"
+                    type="button"
+                    disabled={!walletAddress}
+                    onClick={() => void handleRequestStoreApproval()}
+                    className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white shadow-xs transition-colors hover:bg-neutral-800 disabled:opacity-50 cursor-pointer"
+                  >
+                    {orderPhase === 'rejected'
+                      ? 'Volver a solicitar a la tienda'
+                      : 'Solicitar compra a la tienda'}
+                  </button>
+                )}
+
                 <button
                   id="btn-confirm-credit-purchase"
                   type="button"
-                  disabled={isSubmitting}
-                  onClick={() => void onConfirmPurchase(selectedProduct)}
-                  className="w-full rounded-xl bg-yellow-400 px-4 py-3.5 text-sm font-bold text-neutral-900 shadow-xs transition-colors hover:bg-yellow-300 disabled:opacity-50 cursor-pointer"
+                  disabled={orderPhase !== 'accepted' || !activeOrder || isSubmitting}
+                  onClick={() => {
+                    if (!activeOrder) return
+                    void onConfirmPurchase(selectedProduct, {
+                      orderId: activeOrder.orderId,
+                      memo: activeOrder.memo,
+                    })
+                  }}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-yellow-400 px-4 py-3.5 text-sm font-bold text-neutral-900 shadow-xs transition-colors hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 cursor-pointer"
                 >
-                  {isSubmitting
-                    ? 'Procesando pago...'
-                    : `Pagar ahora (${formatUsdc(selectedProduct.downPaymentUsdc)})`}
+                  {orderPhase !== 'accepted' && <Lock className="h-4 w-4" />}
+                  <span>
+                    {isSubmitting
+                      ? 'Procesando pago...'
+                      : orderPhase === 'accepted'
+                        ? `Pagar ahora (${formatUsdc(selectedProduct.downPaymentUsdc)})`
+                        : orderPhase === 'waiting_store'
+                          ? 'Pagar ahora (esperando aprobación...)'
+                          : 'Pagar ahora (bloqueado hasta aprobación)'}
+                  </span>
                 </button>
               </div>
             </div>

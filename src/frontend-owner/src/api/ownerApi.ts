@@ -9,6 +9,7 @@ import {
   RUTA_OBTENER_TIENDAS,
   RUTA_PERFIL_OWNER_POR_WALLET,
   RUTA_PRODUCTOS_POR_TIENDA,
+  RUTA_RECHAZAR_ORDEN,
   RUTA_REGISTRAR_OWNER,
   RUTA_VENTAS_OWNER,
 } from './paths.js'
@@ -477,6 +478,25 @@ export const ownerApi = {
       )
     }
     return { accepted: true, orderId }
+  },
+
+  /**
+   * Rechaza una orden de compra entrante: POST /api/v1/owner/orders/:orderId/reject
+   */
+  async rejectOrder(
+    orderId: string,
+    reason?: string,
+  ): Promise<{ rejected: boolean; orderId: string }> {
+    if (isRemoteApiConfigured) {
+      return apiRequest<{ rejected: boolean; orderId: string }>(
+        RUTA_RECHAZAR_ORDEN(orderId),
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason: reason ?? '' }),
+        },
+      )
+    }
+    return { rejected: true, orderId }
   },
 
   /**

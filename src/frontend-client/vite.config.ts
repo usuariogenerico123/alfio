@@ -8,7 +8,7 @@ export default defineConfig({
   envPrefix: ['VITE_', 'POLLLAR_', 'POLLAR_'],
   server:{
     allowedHosts:[
-      "nkgcr-135-237-130-227.run.pinggy-free.link"
+      "nmsby-135-237-130-224.run.pinggy-free.link"
     ]
   }
 })

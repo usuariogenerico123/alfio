@@ -4,7 +4,9 @@ import {
   RUTA_ACTUALIZAR_ESTADO_CUOTA,
   RUTA_CATALOGO_PRODUCTOS,
   RUTA_CLIENTE_POR_WALLET,
+  RUTA_CONFIRMAR_PAGO_ORDEN,
   RUTA_CREAR_CREDITO,
+  RUTA_CREAR_ORDEN_STELLAR,
   RUTA_CREDITOS_POR_CLIENTE,
   RUTA_CUOTAS_POR_CREDITO,
   RUTA_GENERAR_CUOTAS,
@@ -12,15 +14,18 @@ import {
   RUTA_PRODUCTO_POR_ID,
   RUTA_PRODUCTO_POR_QR,
   RUTA_REGISTRAR_PAGO,
+  RUTA_SSE_ESTADO_ORDEN,
 } from './paths.js'
 import type {
   CreateCreditPurchaseRequest,
   InstallmentStatus,
+  OrderStatusEvent,
   PayInstallmentRequest,
   PendingInstallment,
   ProductCatalogItem,
   ProductSpec,
   PurchasedProduct,
+  StellarOrderResponse,
   UserPortfolioResponse,
 } from './types'
 
@@ -462,6 +467,118 @@ export const alfioApi = {
         paidInstallments: nextPaid,
         status: nextPaid >= purchase.totalInstallments ? 'completed' : 'active',
       }
+    })
+  },
+
+  /**
+   * Envía la solicitud de compra al backend para notificar a la tienda por SSE:
+   * POST /api/v1/stellar/orders
+   */
+  async createStellarOrder(params: {
+    product: ProductCatalogItem
+    buyerWallet: string
+    buyerName?: string
+  }): Promise<StellarOrderResponse> {
+    if (isRemoteApiConfigured) {
+      let buyerName = params.buyerName?.trim() || ''
+      if (!buyerName) {
+        try {
+          const cliente = await apiRequest<BackendClientResponse>(
+            RUTA_CLIENTE_POR_WALLET(params.buyerWallet),
+          )
+          buyerName = cliente.nombre
+        } catch {
+          buyerName = 'Cliente alFio'
+        }
+      }
+
+      return apiRequest<StellarOrderResponse>(RUTA_CREAR_ORDEN_STELLAR, {
+        method: 'POST',
+        body: JSON.stringify({
+          productId: params.product.id,
+          productCode: params.product.qrCode,
+          productName: params.product.name,
+          description: params.product.description,
+          specs: params.product.specs,
+          buyerName,
+          buyerWallet: params.buyerWallet,
+          storeWallet: params.product.storeWallet,
+          totalPriceUsdc: params.product.totalPriceUsdc,
+        }),
+      })
+    }
+
+    const orderId = `ORD-${Date.now().toString().slice(-5)}`
+    return {
+      orderId,
+      memo: `ALFIO-${orderId}`,
+      storeWallet: params.product.storeWallet,
+      downPaymentUsdc: params.product.downPaymentUsdc,
+      totalPriceUsdc: params.product.totalPriceUsdc,
+    }
+  },
+
+  /**
+   * SSE del comprador: escucha si la tienda acepta (order_accepted) o rechaza (order_rejected):
+   * GET /api/v1/stellar/orders/:orderId/events
+   */
+  subscribeToOrderStatus(
+    orderId: string,
+    handlers: {
+      onAccepted: (ev: OrderStatusEvent) => void
+      onRejected: (ev: OrderStatusEvent) => void
+      onError?: () => void
+    },
+  ): () => void {
+    if (!isRemoteApiConfigured) {
+      const timer = setTimeout(() => {
+        handlers.onAccepted({
+          orderId,
+          status: 'accepted',
+          memo: `ALFIO-${orderId}`,
+        })
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+
+    const source = new EventSource(RUTA_SSE_ESTADO_ORDEN(orderId))
+
+    source.addEventListener('order_accepted', (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent<string>).data) as OrderStatusEvent
+        handlers.onAccepted(parsed)
+      } finally {
+        source.close()
+      }
+    })
+
+    source.addEventListener('order_rejected', (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent<string>).data) as OrderStatusEvent
+        handlers.onRejected(parsed)
+      } finally {
+        source.close()
+      }
+    })
+
+    source.onerror = () => {
+      handlers.onError?.()
+    }
+
+    return () => {
+      source.close()
+    }
+  },
+
+  /**
+   * Confirma el hash devuelto por Pollar en el backend (verifica en Horizon y dispara SSE "Pagado" a la tienda):
+   * POST /api/v1/stellar/orders/:orderId/confirm
+   */
+  async confirmStellarOrderPayment(orderId: string, txHash: string): Promise<void> {
+    if (!isRemoteApiConfigured) return
+    await apiRequest(RUTA_CONFIRMAR_PAGO_ORDEN(orderId), {
+      method: 'POST',
+      body: JSON.stringify({ txHash }),
     })
   },
 }

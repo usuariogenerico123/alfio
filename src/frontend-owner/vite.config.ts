@@ -11,7 +11,7 @@ export default defineConfig({
   server:{
     allowedHosts:[
       
-      "fzoxc-135-237-130-227.run.pinggy-free.link"
+      "exstv-135-237-130-224.run.pinggy-free.link"
     ]
   },
   

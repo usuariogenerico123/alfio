@@ -25,9 +25,19 @@ type CreateOrderRequest struct {
 	TotalPriceUsdc float64       `json:"totalPriceUsdc" binding:"required,gt=0"`
 }
 
-// RegisterRoutes registra los endpoints de órdenes y los 2 streams SSE compatibles con frontend-owner.
+type RejectOrderRequest struct {
+	Reason string `json:"reason"`
+}
+
+type ConfirmOrderPaymentRequest struct {
+	TxHash string `json:"txHash" binding:"required"`
+}
+
+// RegisterRoutes registra las rutas HTTP y streams SSE separados por actor: COMPRADOR y TIENDA.
 func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) {
-	// Acá el cliente manda la orden de compra y nosotros empujamos la alerta por SSE al dueño
+
+	// COMPRADOR (frontend-client)
+	// COMPRADOR envía solicitud de compra (dispara alerta SSE a la tienda) -------
 	rg.POST("/stellar/orders", func(c *gin.Context) {
 		var req CreateOrderRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -58,21 +68,115 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 			CreatedAt:             time.Now().UTC().Format(time.RFC3339),
 		}
 
-		// Acá disparamos el evento hacia el stream SSE #1 que está escuchando el frontend del dueño
 		hub.PublishOrder(ev)
 		c.JSON(http.StatusCreated, ev)
 	})
 
-	// Acá el frontend del dueño se conecta al SSE #1 y se queda esperando alertas de órdenes nuevas
-	rg.GET("/owner/events/orders", func(c *gin.Context) {
+	//  SSE COMPRADOR: escucha si la tienda acepta o rechaza su solicitud -------
+	rg.GET("/stellar/orders/:orderId/events", func(c *gin.Context) {
+		orderID := c.Param("orderId")
 		setSSEHeaders(c)
-		ch, unsubscribe := hub.SubscribeOrders()
+		ch, snapshot, unsubscribe := hub.SubscribeOrderStatus(orderID)
 		defer unsubscribe()
 
 		ctx := c.Request.Context()
 		flusher, _ := c.Writer.(http.Flusher)
 
-		// Acá mandamos un ping inicial para que el navegador sepa que el SSE ya conectó
+		fmt.Fprintf(c.Writer, ": waiting_store_decision\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+
+		if snapshot != nil {
+			eventName := "order_accepted"
+			if snapshot.Status == OrderStatusRejected {
+				eventName = "order_rejected"
+			}
+			writeSSEEvent(c.Writer, flusher, eventName, snapshot)
+			return
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				eventName := "order_accepted"
+				if ev.Status == OrderStatusRejected {
+					eventName = "order_rejected"
+				}
+				writeSSEEvent(c.Writer, flusher, eventName, ev)
+				return
+			}
+		}
+	})
+
+	// COMPRADOR: confirma el hash de pago devuelto por Pollar (verifica en Horizon y avisa a la tienda) -------
+	rg.POST("/stellar/orders/:orderId/confirm", func(c *gin.Context) {
+		orderID := c.Param("orderId")
+		ord := hub.GetOrder(orderID)
+		if ord == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "orden no encontrada"})
+			return
+		}
+		if !ord.IsAccepted() {
+			c.JSON(http.StatusConflict, gin.H{"error": "la orden aún no fue aceptada por la tienda"})
+			return
+		}
+
+		var req ConfirmOrderPaymentRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "txHash requerido: " + err.Error()})
+			return
+		}
+
+		txHash := strings.TrimSpace(req.TxHash)
+		tx, err := horizon.GetTransaction(c.Request.Context(), txHash)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "no se pudo verificar la transacción en Horizon: " + err.Error()})
+			return
+		}
+		if !tx.Successful {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "la transacción en Stellar no fue exitosa"})
+			return
+		}
+		if ord.event.Memo != "" && strings.TrimSpace(tx.Memo) != ord.event.Memo {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "el memo de la transacción no coincide con la orden"})
+			return
+		}
+
+		confirmed := PaymentConfirmedEvent{
+			OrderID:        ord.event.OrderID,
+			ProductCode:    ord.event.ProductCode,
+			ProductName:    ord.event.ProductName,
+			BuyerName:      ord.event.BuyerName,
+			BuyerWallet:    ord.event.BuyerWallet,
+			AmountPaidUsdc: ord.event.DownPaymentUsdc,
+			TotalPriceUsdc: ord.event.TotalPriceUsdc,
+			TxHash:         txHash,
+			PaidAt:         time.Now().UTC().Format(time.RFC3339),
+		}
+
+		hub.PublishPaymentOnce(ord, confirmed)
+		c.JSON(http.StatusOK, confirmed)
+	})
+
+	// =========================================================================
+	// TIENDA (frontend-owner)
+
+	// SSE TIENDA: escucha solicitudes de compra nuevas 
+	rg.GET("/owner/events/orders", func(c *gin.Context) {
+		setSSEHeaders(c)
+		storeWallet := c.Query("storeWallet")
+		ch, unsubscribe := hub.SubscribeOrders(storeWallet)
+		defer unsubscribe()
+
+		ctx := c.Request.Context()
+		flusher, _ := c.Writer.(http.Flusher)
+
 		fmt.Fprintf(c.Writer, ": connected\n\n")
 		if flusher != nil {
 			flusher.Flush()
@@ -86,13 +190,12 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 				if !ok {
 					return
 				}
-				// Acá le empujamos la orden al dueño para que vea el producto y el botón "Aceptar"
 				writeSSEEvent(c.Writer, flusher, "order_created", ev)
 			}
 		}
 	})
 
-	// Acá llega el click de "Aceptar" del dueño y arrancamos la goroutine que escucha pagos en Stellar
+	// TIENDA: acepta solicitud (desbloquea pago en el comprador y escucha Horizon como respaldo) -------
 	rg.POST("/owner/orders/:orderId/accept", func(c *gin.Context) {
 		orderID := c.Param("orderId")
 		ord, started := hub.TryAcceptOrder(orderID)
@@ -100,9 +203,13 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 			c.JSON(http.StatusNotFound, gin.H{"error": "orden no encontrada"})
 			return
 		}
+		if !started && !ord.IsAccepted() {
+			c.JSON(http.StatusConflict, gin.H{"error": "la orden ya fue rechazada"})
+			return
+		}
 
 		if started {
-			// Acá lanzamos la goroutine en segundo plano para escuchar a Horizon sin bloquear esta petición
+			// Goroutine en segundo plano escuchando Horizon como respaldo si el comprador no llama a /confirm
 			go watchOrderPaymentOnHorizon(hub, horizon, ord)
 		}
 
@@ -113,11 +220,33 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 		})
 	})
 
-	// Acá el frontend del dueño se conecta al SSE #2 para esperar la confirmación de "Pagado"
+	// ------- TIENDA: rechaza solicitud (avisa al SSE del comprador) -------
+	rg.POST("/owner/orders/:orderId/reject", func(c *gin.Context) {
+		orderID := c.Param("orderId")
+		var req RejectOrderRequest
+		_ = c.ShouldBindJSON(&req)
+
+		ord, rejected := hub.RejectOrder(orderID, req.Reason)
+		if ord == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "orden no encontrada"})
+			return
+		}
+		if !rejected {
+			c.JSON(http.StatusConflict, gin.H{"error": "la orden ya fue procesada"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"rejected": true,
+			"orderId":  orderID,
+		})
+	})
+
+	// ------- SSE TIENDA: escucha confirmación de pago de una orden aceptada -------
 	rg.GET("/owner/events/payments/:orderId", func(c *gin.Context) {
 		orderID := c.Param("orderId")
 		setSSEHeaders(c)
-		ch, unsubscribe := hub.SubscribePayment(orderID)
+		ch, snapshot, unsubscribe := hub.SubscribePayment(orderID)
 		defer unsubscribe()
 
 		ctx := c.Request.Context()
@@ -128,6 +257,11 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 			flusher.Flush()
 		}
 
+		if snapshot != nil {
+			writeSSEEvent(c.Writer, flusher, "order_paid", snapshot)
+			return
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -136,7 +270,6 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 				if !ok {
 					return
 				}
-				// Acá le empujamos el evento "order_paid" al dueño para que salga la ventana "Pagado"
 				writeSSEEvent(c.Writer, flusher, "order_paid", ev)
 				return
 			}
@@ -144,14 +277,12 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 	})
 }
 
-// Acá la goroutine se queda escuchando las alertas de pago de Stellar (Horizon) con un límite de 5 minutos
+// watchOrderPaymentOnHorizon escucha pagos entrantes a la wallet de la tienda en Horizon Testnet (timeout 5 min).
 func watchOrderPaymentOnHorizon(hub *EventHub, horizon *HorizonClient, ord *trackedOrder) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Acá escuchamos en tiempo real los pagos entrantes a la wallet de la tienda en Horizon Testnet
 	err := horizon.ListenPayments(ctx, ord.event.StoreWallet, func(pay PaymentEvent) {
-		// Acá verificamos en Horizon que la transacción fue exitosa y que el memo coincide con esta orden
 		tx, err := horizon.GetTransaction(ctx, pay.TransactionHash)
 		if err != nil || !tx.Successful {
 			return
@@ -177,7 +308,6 @@ func watchOrderPaymentOnHorizon(hub *EventHub, horizon *HorizonClient, ord *trac
 			PaidAt:         time.Now().UTC().Format(time.RFC3339),
 		}
 
-		// Acá avisamos de forma atómica (una sola vez) al SSE #2 del dueño que el pago ya entró y cerramos el stream
 		if hub.PublishPaymentOnce(ord, confirmed) {
 			cancel()
 		}
