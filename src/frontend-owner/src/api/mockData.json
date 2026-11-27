@@ -1,0 +1,137 @@
+{
+  "storeName": "Tienda Paso Firme",
+  "metrics": {
+    "salesTodayUsdc": 180,
+    "salesTodayCount": 2,
+    "receivableTodayUsdc": 42.5,
+    "receivableTodayCount": 3,
+    "overdueAmountUsdc": 25,
+    "overdueCount": 1
+  },
+  "products": [
+    {
+      "id": "prod-001",
+      "qrCode": "ALFIO-ZAP-001",
+      "name": "Zapatillas Urban Runner",
+      "description": "Calzado deportivo ligero con suela amortiguada.",
+      "specs": [
+        { "label": "Talla", "value": "42 EU" },
+        { "label": "Material", "value": "Malla + EVA" },
+        { "label": "Garantía", "value": "6 meses" }
+      ],
+      "basePriceUsdc": 95,
+      "platformFeeUsdc": 5,
+      "totalPriceUsdc": 100,
+      "stock": 8,
+      "active": true
+    },
+    {
+      "id": "prod-002",
+      "qrCode": "ALFIO-MOC-002",
+      "name": "Mochila Impermeable 25L",
+      "description": "Compartimento acolchado para laptop de hasta 16 pulgadas.",
+      "specs": [
+        { "label": "Capacidad", "value": "25 Litros" },
+        { "label": "Resistencia", "value": "Impermeable IPX4" },
+        { "label": "Garantía", "value": "12 meses" }
+      ],
+      "basePriceUsdc": 57,
+      "platformFeeUsdc": 3,
+      "totalPriceUsdc": 60,
+      "stock": 12,
+      "active": true
+    },
+    {
+      "id": "prod-003",
+      "qrCode": "ALFIO-CHA-003",
+      "name": "Chaqueta Cortaviento Pro",
+      "description": "Tela técnica liviana, costuras selladas y capucha ajustable.",
+      "specs": [
+        { "label": "Talla", "value": "M / L" },
+        { "label": "Color", "value": "Gris Grafito" },
+        { "label": "Garantía", "value": "6 meses" }
+      ],
+      "basePriceUsdc": 114,
+      "platformFeeUsdc": 6,
+      "totalPriceUsdc": 120,
+      "stock": 5,
+      "active": true
+    }
+  ],
+  "soldProducts": [
+    {
+      "id": "sold-101",
+      "orderId": "ord-801",
+      "productCode": "ALFIO-ZAP-001",
+      "productName": "Zapatillas Urban Runner",
+      "buyerName": "Carlos Méndez",
+      "buyerWallet": "GBCLIENT1CARLOSMENDEZSTELLARTESTNET000000000000000001",
+      "soldAt": "2026-11-21",
+      "totalAmountUsdc": 100,
+      "downPaymentUsdc": 50,
+      "paidInstallments": 1,
+      "totalInstallments": 4,
+      "status": "active",
+      "txHash": "tx_9a8b7c6d5e4f"
+    },
+    {
+      "id": "sold-102",
+      "orderId": "ord-802",
+      "productCode": "ALFIO-MOC-002",
+      "productName": "Mochila Impermeable 25L",
+      "buyerName": "Lucía Fernández",
+      "buyerWallet": "GBCLIENT2LUCIAFERNANDEZSTELLARTESTNET0000000000000002",
+      "soldAt": "2026-11-21",
+      "totalAmountUsdc": 60,
+      "downPaymentUsdc": 30,
+      "paidInstallments": 4,
+      "totalInstallments": 4,
+      "status": "completed",
+      "txHash": "tx_1b2c3d4e5f6a"
+    },
+    {
+      "id": "sold-103",
+      "orderId": "ord-803",
+      "productCode": "ALFIO-CHA-003",
+      "productName": "Chaqueta Cortaviento Pro",
+      "buyerName": "Mateo Rojas",
+      "buyerWallet": "GBCLIENT3MATEOROJASSTELLARTESTNET00000000000000000003",
+      "soldAt": "2026-10-28",
+      "totalAmountUsdc": 120,
+      "downPaymentUsdc": 60,
+      "paidInstallments": 1,
+      "totalInstallments": 4,
+      "status": "active",
+      "txHash": "tx_5f4e3d2c1b0a"
+    }
+  ],
+  "clients": [
+    {
+      "id": "cli-01",
+      "name": "Carlos Méndez",
+      "walletAddress": "GBCLIENT1CARLOSMENDEZSTELLARTESTNET000000000000000001",
+      "activeCredits": 1,
+      "pendingBalanceUsdc": 37.5,
+      "nextDueDate": "2026-12-06",
+      "status": "on_time"
+    },
+    {
+      "id": "cli-02",
+      "name": "Mateo Rojas",
+      "walletAddress": "GBCLIENT3MATEOROJASSTELLARTESTNET00000000000000000003",
+      "activeCredits": 1,
+      "pendingBalanceUsdc": 45,
+      "nextDueDate": "2026-11-18",
+      "status": "overdue"
+    },
+    {
+      "id": "cli-03",
+      "name": "Lucía Fernández",
+      "walletAddress": "GBCLIENT2LUCIAFERNANDEZSTELLARTESTNET0000000000000002",
+      "activeCredits": 0,
+      "pendingBalanceUsdc": 0,
+      "nextDueDate": null,
+      "status": "completed"
+    }
+  ]
+}

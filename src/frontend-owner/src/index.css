@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-alfio-yellow: #facc15;
+  --color-alfio-yellow-hover: #eab308;
+  --color-alfio-bg: #f6f7f9;
+  --color-alfio-surface: #ffffff;
+  --color-alfio-ink: #111827;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--color-alfio-bg);
+    color: var(--color-alfio-ink);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-alfio-bg);
+  }
+}
+
+.floating-card {
+  background-color: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  box-shadow:
+    0 12px 32px -12px rgba(15, 23, 42, 0.09),
+    0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}

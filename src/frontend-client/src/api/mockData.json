@@ -1,0 +1,136 @@
+{
+  "catalog": [
+    {
+      "id": "prod-001",
+      "qrCode": "ALFIO-ZAP-001",
+      "name": "Zapatillas Urban Runner",
+      "storeName": "Tienda Paso Firme",
+      "storeWallet": "GBSTORE1EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000001",
+      "description": "Calzado deportivo ligero con suela amortiguada, ideal para uso diario.",
+      "specs": [
+        { "label": "Talla", "value": "42 EU" },
+        { "label": "Material", "value": "Malla transpirable + EVA" },
+        { "label": "Garantía", "value": "6 meses en tienda" },
+        { "label": "Condición", "value": "Nuevo" }
+      ],
+      "basePriceUsdc": 95,
+      "platformFeeUsdc": 5,
+      "totalPriceUsdc": 100,
+      "downPaymentUsdc": 50,
+      "installmentAmountUsdc": 12.5,
+      "installmentsCount": 4,
+      "intervalDays": 15
+    },
+    {
+      "id": "prod-002",
+      "qrCode": "ALFIO-AUD-002",
+      "name": "Auriculares Bluetooth Studio",
+      "storeName": "TecnoSur Store",
+      "storeWallet": "GBSTORE2EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000002",
+      "description": "Cancelación activa de ruido, 30h de batería y carga rápida USB-C.",
+      "specs": [
+        { "label": "Conectividad", "value": "Bluetooth 5.3 + Jack 3.5mm" },
+        { "label": "Autonomía", "value": "Hasta 30 horas" },
+        { "label": "Garantía", "value": "12 meses oficial" },
+        { "label": "Incluye", "value": "Cable USB-C y estuche" }
+      ],
+      "basePriceUsdc": 76,
+      "platformFeeUsdc": 4,
+      "totalPriceUsdc": 80,
+      "downPaymentUsdc": 40,
+      "installmentAmountUsdc": 10,
+      "installmentsCount": 4,
+      "intervalDays": 15
+    },
+    {
+      "id": "prod-003",
+      "qrCode": "ALFIO-CAF-003",
+      "name": "Cafetera Espresso Compact",
+      "storeName": "Hogar & Café",
+      "storeWallet": "GBSTORE3EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000003",
+      "description": "Presión de 15 bares con vaporizador de leche integrado y depósito extraíble.",
+      "specs": [
+        { "label": "Presión", "value": "15 bares" },
+        { "label": "Capacidad", "value": "1.2 Litros" },
+        { "label": "Potencia", "value": "1100 W" },
+        { "label": "Garantía", "value": "12 meses en tienda" }
+      ],
+      "basePriceUsdc": 152,
+      "platformFeeUsdc": 8,
+      "totalPriceUsdc": 160,
+      "downPaymentUsdc": 80,
+      "installmentAmountUsdc": 20,
+      "installmentsCount": 4,
+      "intervalDays": 15
+    }
+  ],
+  "purchasedProducts": [
+    {
+      "id": "pur-101",
+      "productId": "prod-002",
+      "productName": "Auriculares Bluetooth Studio",
+      "storeName": "TecnoSur Store",
+      "purchasedAt": "2026-11-01",
+      "totalAmountUsdc": 80,
+      "downPaymentPaidUsdc": 40,
+      "paidInstallments": 1,
+      "totalInstallments": 4,
+      "status": "active",
+      "txHash": "7a9b3c1d4e5f60718293a4b5c6d7e8f9"
+    },
+    {
+      "id": "pur-102",
+      "productId": "prod-001",
+      "productName": "Mochila Impermeable 25L",
+      "storeName": "Tienda Paso Firme",
+      "purchasedAt": "2026-09-10",
+      "totalAmountUsdc": 60,
+      "downPaymentPaidUsdc": 30,
+      "paidInstallments": 4,
+      "totalInstallments": 4,
+      "status": "completed",
+      "txHash": "1f2e3d4c5b6a79887766554433221100"
+    }
+  ],
+  "pendingInstallments": [
+    {
+      "id": "inst-201",
+      "purchaseId": "pur-101",
+      "productName": "Auriculares Bluetooth Studio",
+      "storeName": "TecnoSur Store",
+      "installmentNumber": 2,
+      "totalInstallments": 4,
+      "amountUsdc": 10,
+      "dueDate": "2026-12-01",
+      "status": "pending",
+      "memo": "ALFIO-INST-201",
+      "destinationWallet": "GBSTORE2EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000002"
+    },
+    {
+      "id": "inst-202",
+      "purchaseId": "pur-101",
+      "productName": "Auriculares Bluetooth Studio",
+      "storeName": "TecnoSur Store",
+      "installmentNumber": 3,
+      "totalInstallments": 4,
+      "amountUsdc": 10,
+      "dueDate": "2026-12-16",
+      "status": "pending",
+      "memo": "ALFIO-INST-202",
+      "destinationWallet": "GBSTORE2EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000002"
+    },
+    {
+      "id": "inst-203",
+      "purchaseId": "pur-101",
+      "productName": "Auriculares Bluetooth Studio",
+      "storeName": "TecnoSur Store",
+      "installmentNumber": 4,
+      "totalInstallments": 4,
+      "amountUsdc": 10,
+      "dueDate": "2026-12-31",
+      "status": "pending",
+      "memo": "ALFIO-INST-203",
+      "destinationWallet": "GBSTORE2EXAMPLEWALLETADDRESSSTELLARTESTNET00000000000002"
+    }
+  ]
+}
