@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	OrderStatusPending  = "pending"
-	OrderStatusAccepted = "accepted"
-	OrderStatusRejected = "rejected"
+	OrderStatusPending   = "pending"
+	OrderStatusAccepted  = "accepted"
+	OrderStatusRejected  = "rejected"
+	OrderStatusCancelled = "cancelled"
 )
 
 // ProductSpec coincide con el formato de especificaciones que muestra frontend-owner.
@@ -58,7 +59,19 @@ type PaymentConfirmedEvent struct {
 	PaidAt         string  `json:"paidAt"`
 }
 
-// trackedOrder protege de forma concurrente el ciclo de vida de una orden (pendiente -> aceptada/rechazada -> pagada).
+// OrderCancelledEvent avisa a la tienda que el comprador canceló su solicitud.
+type OrderCancelledEvent struct {
+	OrderID string `json:"orderId"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// OwnerStreamMessage encapsula los eventos enviados por el SSE #1 de la tienda (order_created / order_cancelled).
+type OwnerStreamMessage struct {
+	EventName string
+	Payload   any
+}
+
+// trackedOrder protege de forma concurrente el ciclo de vida de una orden (pendiente -> aceptada/rechazada/cancelada -> pagada).
 type trackedOrder struct {
 	event            OrderAlertEvent
 	mu               sync.Mutex
@@ -76,7 +89,7 @@ func (o *trackedOrder) IsAccepted() bool {
 // EventHub coordina de forma concurrente y segura los streams SSE del comprador y de la tienda.
 type EventHub struct {
 	mu                sync.RWMutex
-	orderSubscribers  map[chan OrderAlertEvent]string
+	orderSubscribers  map[chan OwnerStreamMessage]string
 	statusSubscribers map[string]map[chan OrderStatusEvent]struct{}
 	paySubscribers    map[string]map[chan PaymentConfirmedEvent]struct{}
 	orders            map[string]*trackedOrder
@@ -84,7 +97,7 @@ type EventHub struct {
 
 func NewEventHub() *EventHub {
 	return &EventHub{
-		orderSubscribers:  make(map[chan OrderAlertEvent]string),
+		orderSubscribers:  make(map[chan OwnerStreamMessage]string),
 		statusSubscribers: make(map[string]map[chan OrderStatusEvent]struct{}),
 		paySubscribers:    make(map[string]map[chan PaymentConfirmedEvent]struct{}),
 		orders:            make(map[string]*trackedOrder),
@@ -97,10 +110,10 @@ func (h *EventHub) GetOrder(orderID string) *trackedOrder {
 	return h.orders[orderID]
 }
 
-// SubscribeOrders suscribe a una tienda para recibir alertas de órdenes nuevas.
+// SubscribeOrders suscribe a una tienda para recibir alertas de órdenes nuevas y cancelaciones.
 // Si storeWallet es vacío, recibe todas las órdenes; si se especifica, filtra solo las de esa wallet.
-func (h *EventHub) SubscribeOrders(storeWallet string) (chan OrderAlertEvent, func()) {
-	ch := make(chan OrderAlertEvent, 16)
+func (h *EventHub) SubscribeOrders(storeWallet string) (chan OwnerStreamMessage, func()) {
+	ch := make(chan OwnerStreamMessage, 16)
 	normalizedWallet := strings.ToUpper(strings.TrimSpace(storeWallet))
 
 	h.mu.Lock()
@@ -123,16 +136,64 @@ func (h *EventHub) PublishOrder(ev OrderAlertEvent) {
 		event:  ev,
 		status: OrderStatusPending,
 	}
+	msg := OwnerStreamMessage{EventName: "order_created", Payload: ev}
 	for ch, filterWallet := range h.orderSubscribers {
 		if filterWallet != "" && evStoreWallet != "" && filterWallet != evStoreWallet {
 			continue
 		}
 		select {
-		case ch <- ev:
+		case ch <- msg:
 		default:
 		}
 	}
 	h.mu.Unlock()
+}
+
+// CancelOrder cancela una orden pendiente o aceptada (si aún no fue pagada) y avisa a la tienda.
+func (h *EventHub) CancelOrder(orderID, reason string) (*trackedOrder, bool) {
+	h.mu.RLock()
+	ord, ok := h.orders[orderID]
+	h.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+
+	ord.mu.Lock()
+	if ord.paid.Load() || ord.status == OrderStatusRejected || ord.status == OrderStatusCancelled {
+		ord.mu.Unlock()
+		return ord, false
+	}
+	ord.status = OrderStatusCancelled
+	ord.accepted.Store(false)
+	ord.reason = strings.TrimSpace(reason)
+	if ord.reason == "" {
+		ord.reason = "El comprador canceló la solicitud"
+	}
+	finalReason := ord.reason
+	evStoreWallet := strings.ToUpper(strings.TrimSpace(ord.event.StoreWallet))
+	ord.mu.Unlock()
+
+	msg := OwnerStreamMessage{
+		EventName: "order_cancelled",
+		Payload: OrderCancelledEvent{
+			OrderID: ord.event.OrderID,
+			Reason:  finalReason,
+		},
+	}
+
+	h.mu.RLock()
+	for ch, filterWallet := range h.orderSubscribers {
+		if filterWallet != "" && evStoreWallet != "" && filterWallet != evStoreWallet {
+			continue
+		}
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+	h.mu.RUnlock()
+
+	return ord, true
 }
 
 // SubscribeOrderStatus suscribe al comprador para recibir order_accepted u order_rejected.

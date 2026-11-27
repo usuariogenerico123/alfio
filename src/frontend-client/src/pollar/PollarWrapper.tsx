@@ -98,10 +98,17 @@ function PollarBridge({ children }: { children: ReactNode }) {
       //   return { ok: true, hash: fakeHash }
       // }
 
+      if (!destination?.trim()) {
+        return {
+          ok: false,
+          error: 'La tienda no tiene una billetera Stellar válida configurada.',
+        }
+      }
+
       try {
         const outcome = await pollar.sendPayment({
           chain: 'STELLAR',
-          destination,
+          destination: destination.trim(),
           amount,
           asset: {
             type: 'credit_alphanum4',
@@ -110,11 +117,30 @@ function PollarBridge({ children }: { children: ReactNode }) {
           },
           options: memo ? { memo: { type: 'text', value: memo } } : undefined,
         })
-        if (outcome && 'hash' in outcome && typeof outcome.hash === 'string') {
+
+        if (
+          (outcome.status === 'success' || outcome.status === 'pending') &&
+          typeof outcome.hash === 'string' &&
+          outcome.hash.trim() !== ''
+        ) {
           await pollar.refreshWalletBalance()
           return { ok: true, hash: outcome.hash }
         }
-        return { ok: true }
+
+        if (outcome.status === 'error') {
+          const detail =
+            outcome.message ||
+            outcome.details ||
+            outcome.resultCode ||
+            outcome.code ||
+            'La transacción fue rechazada en Stellar.'
+          return { ok: false, error: detail }
+        }
+
+        return {
+          ok: false,
+          error: 'El pago no devolvió confirmación de transacción en Stellar.',
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'No se pudo completar el pago'
         return { ok: false, error: message }

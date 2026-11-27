@@ -164,10 +164,32 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 		c.JSON(http.StatusOK, confirmed)
 	})
 
+	// COMPRADOR: cancela su solicitud de compra (avisa a la tienda para limpiar la alerta)
+	rg.POST("/stellar/orders/:orderId/cancel", func(c *gin.Context) {
+		orderID := c.Param("orderId")
+		var req RejectOrderRequest
+		_ = c.ShouldBindJSON(&req)
+
+		ord, cancelled := hub.CancelOrder(orderID, req.Reason)
+		if ord == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "orden no encontrada"})
+			return
+		}
+		if !cancelled {
+			c.JSON(http.StatusConflict, gin.H{"error": "la orden ya no se puede cancelar"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"cancelled": true,
+			"orderId":   orderID,
+		})
+	})
+
 	// =========================================================================
 	// TIENDA (frontend-owner)
 
-	// SSE TIENDA: escucha solicitudes de compra nuevas 
+	// SSE TIENDA: escucha solicitudes de compra nuevas y cancelaciones
 	rg.GET("/owner/events/orders", func(c *gin.Context) {
 		setSSEHeaders(c)
 		storeWallet := c.Query("storeWallet")
@@ -186,11 +208,11 @@ func RegisterRoutes(rg *gin.RouterGroup, hub *EventHub, horizon *HorizonClient) 
 			select {
 			case <-ctx.Done():
 				return
-			case ev, ok := <-ch:
+			case msg, ok := <-ch:
 				if !ok {
 					return
 				}
-				writeSSEEvent(c.Writer, flusher, "order_created", ev)
+				writeSSEEvent(c.Writer, flusher, msg.EventName, msg.Payload)
 			}
 		}
 	})

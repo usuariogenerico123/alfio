@@ -2,6 +2,7 @@ import { apiRequest, isRemoteApiConfigured } from './client'
 import rawMockData from './mockData.json'
 import {
   RUTA_ACTUALIZAR_ESTADO_CUOTA,
+  RUTA_CANCELAR_ORDEN,
   RUTA_CATALOGO_PRODUCTOS,
   RUTA_CLIENTE_POR_WALLET,
   RUTA_CONFIRMAR_PAGO_ORDEN,
@@ -633,6 +634,18 @@ export const alfioApi = {
     await apiRequest(RUTA_CONFIRMAR_PAGO_ORDEN(orderId), {
       method: 'POST',
       body: JSON.stringify({ txHash }),
+    })
+  },
+
+  /**
+   * Cancela una solicitud de compra pendiente o aceptada (avisa a la tienda para limpiar la alerta):
+   * POST /api/v1/stellar/orders/:orderId/cancel
+   */
+  async cancelStellarOrder(orderId: string): Promise<void> {
+    if (!isRemoteApiConfigured) return
+    await apiRequest(RUTA_CANCELAR_ORDEN(orderId), {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'El comprador canceló la solicitud' }),
     })
   },
 }

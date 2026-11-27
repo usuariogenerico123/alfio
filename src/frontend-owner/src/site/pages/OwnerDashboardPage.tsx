@@ -61,6 +61,15 @@ export function OwnerDashboardPage() {
         setActiveOrder(order)
         setAlertPhase('incoming')
       },
+      onOrderCancelled: ({ orderId }) => {
+        setActiveOrder((current) => {
+          if (current && current.orderId === orderId) {
+            setAlertPhase('idle')
+            return null
+          }
+          return current
+        })
+      },
     })
     return unsubscribe
   }, [])

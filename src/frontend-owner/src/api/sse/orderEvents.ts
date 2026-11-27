@@ -18,6 +18,7 @@ const mockPaymentListeners = new Map<string, Set<PaymentListener>>()
  */
 export function subscribeToOrderAlerts(handlers: {
   onOrder: OrderListener
+  onOrderCancelled?: (payload: { orderId: string; reason?: string }) => void
   onStatusChange?: (status: SseConnectionState) => void
 }): () => void {
   if (!isRemoteApiConfigured) {
@@ -47,6 +48,17 @@ export function subscribeToOrderAlerts(handlers: {
   source.onmessage = (event) => handlePayload(event.data)
   source.addEventListener('order_created', (event) => {
     handlePayload((event as MessageEvent<string>).data)
+  })
+  source.addEventListener('order_cancelled', (event) => {
+    try {
+      const parsed = JSON.parse((event as MessageEvent<string>).data) as {
+        orderId: string
+        reason?: string
+      }
+      handlers.onOrderCancelled?.(parsed)
+    } catch {
+      // Ignorar eventos malformados
+    }
   })
 
   source.onerror = () => {

@@ -11,7 +11,7 @@ export default defineConfig({
   server:{
     allowedHosts:[
       
-      "exstv-135-237-130-224.run.pinggy-free.link"
+      "nhzpp-135-237-130-226.run.pinggy-free.link"
     ]
   },
   

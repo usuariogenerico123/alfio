@@ -55,20 +55,18 @@ export function DashboardPage() {
         memo: order.memo,
       })
 
-      if (!payment.ok) {
+      if (!payment.ok || !payment.hash) {
         setFeedback({
           type: 'err',
-          text: payment.error ?? 'No se pudo realizar el pago del 50% inicial.',
+          text: payment.error ?? 'No se pudo realizar el pago del 50% inicial en Stellar.',
         })
         return
       }
 
-      if (payment.hash) {
-        try {
-          await alfioApi.confirmStellarOrderPayment(order.orderId, payment.hash)
-        } catch {
-          // Si falla la confirmación directa, el listener de Horizon en el backend actúa como respaldo
-        }
+      try {
+        await alfioApi.confirmStellarOrderPayment(order.orderId, payment.hash)
+      } catch {
+        // Si falla la confirmación directa, el listener de Horizon en el backend actúa como respaldo
       }
 
       await alfioApi.createCreditPurchase({

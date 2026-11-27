@@ -41,3 +41,5 @@ export let RUTA_SSE_ESTADO_ORDEN = (orderId) =>
   API_URL + `/api/v1/stellar/orders/${encodeURIComponent(orderId)}/events`
 export let RUTA_CONFIRMAR_PAGO_ORDEN = (orderId) =>
   API_URL + `/api/v1/stellar/orders/${encodeURIComponent(orderId)}/confirm`
+export let RUTA_CANCELAR_ORDEN = (orderId) =>
+  API_URL + `/api/v1/stellar/orders/${encodeURIComponent(orderId)}/cancel`
