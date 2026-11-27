@@ -67,6 +67,13 @@ export interface UserPortfolioResponse {
   pendingInstallments: PendingInstallment[]
 }
 
+export interface ClientProfile {
+  nombre: string
+  ci: string
+  telefono: string
+  walletAddress?: string
+}
+
 export interface StellarOrderResponse {
   orderId: string
   memo: string

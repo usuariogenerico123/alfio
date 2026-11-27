@@ -3,7 +3,7 @@ import type { StellarNetwork } from '@pollar/core'
 const env = import.meta.env as Record<string, string | undefined>
 
 const rawApiKey =
-  env.POLLLAR_KEY?.trim() ||
+  env.POLLAR_KEY?.trim() ||
   env.VITE_POLLAR_KEY?.trim() ||
   env.POLLAR_KEY?.trim() ||
   env.VITE_POLLAR_API_KEY?.trim() ||
@@ -12,7 +12,7 @@ const rawApiKey =
 const rawNetwork = (env.VITE_POLLAR_NETWORK || env.POLLAR_NETWORK)?.trim()
 
 const rawUsdcIssuer =
-  (env.STELLAR_USDC_ISSUER || env.POLLAR_USDC_ISSUER)?.trim() ||
+  (env.VITE_STELLAR_USDC_ISSUER ||env.STELLAR_USDC_ISSUER || env.POLLAR_USDC_ISSUER)?.trim() ||
   'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5'
 
 export const POLLAR_CONFIG = {

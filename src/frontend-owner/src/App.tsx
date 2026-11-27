@@ -19,10 +19,10 @@ export function App() {
       setIsOwnerVerified(false)
       return
     }
-    if (wallet.isDemoMode) {
-      setIsOwnerVerified(true)
-      return
-    }
+    // if (wallet.isDemoMode) {
+    //   setIsOwnerVerified(true)
+    //   return
+    // }
     if (!wallet.walletAddress || isOwnerVerified || registeringRef.current) return
 
     registeringRef.current = true
@@ -57,7 +57,7 @@ export function App() {
       .finally(() => {
         registeringRef.current = false
       })
-  }, [wallet.isAuthenticated, wallet.isDemoMode, wallet.walletAddress, wallet.logout, pendingProfile, isOwnerVerified])
+  }, [wallet.isAuthenticated, wallet.walletAddress, wallet.logout, pendingProfile, isOwnerVerified])
 
   const handleRegisterWithPollar = async (profile: OwnerProfile) => {
     // Primero guardamos el formulario y abrimos Pollar para obtener billetera_g tras autenticar
@@ -65,12 +65,12 @@ export function App() {
     wallet.openLogin()
   }
 
-  const handleEnterDemo = async (profile?: OwnerProfile) => {
-    if (profile) {
-      await ownerApi.registerOwner(profile)
-    }
-    wallet.enterDemoSession()
-  }
+  // const handleEnterDemo = async (profile?: OwnerProfile) => {
+  //   if (profile) {
+  //     await ownerApi.registerOwner(profile)
+  //   }
+  //   wallet.enterDemoSession()
+  // }
 
   if (!wallet.isAuthenticated || !isOwnerVerified) {
     return (
@@ -79,7 +79,7 @@ export function App() {
           hasPollarApiKey={wallet.hasPollarApiKey}
           onLoginPollar={wallet.openLogin}
           onRegisterWithPollar={handleRegisterWithPollar}
-          onEnterDemo={handleEnterDemo}
+          // onEnterDemo={handleEnterDemo}
         />
         {alertMessage && (
           <AlertModal message={alertMessage} onClose={() => setAlertMessage(null)} />

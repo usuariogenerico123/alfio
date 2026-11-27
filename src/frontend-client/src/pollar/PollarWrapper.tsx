@@ -21,7 +21,7 @@ export interface AlfioWalletContextValue {
   balances: WalletAssetBalance[]
   isLoadingBalance: boolean
   openLogin: () => void
-  enterDemoSession: () => void
+  // enterDemoSession: () => void
   createWallet: () => Promise<void>
   logout: () => void
   refreshBalance: () => Promise<void>
@@ -34,16 +34,16 @@ export interface AlfioWalletContextValue {
 
 const AlfioWalletContext = createContext<AlfioWalletContextValue | null>(null)
 
-const DEMO_WALLET_ADDRESS = 'GDALFIO7DEMO2STELLAR4TESTNET8WALLET3USER9XYZ2ABC4DEF6'
-const DEMO_INITIAL_BALANCES: WalletAssetBalance[] = [
-  { code: 'USDC', balance: '320.00', available: '320.00' },
-  { code: 'XLM', balance: '100.00', available: '95.00' },
-]
+// const DEMO_WALLET_ADDRESS = 'GDALFIO7DEMO2STELLAR4TESTNET8WALLET3USER9XYZ2ABC4DEF6'
+// const DEMO_INITIAL_BALANCES: WalletAssetBalance[] = [
+//   { code: 'USDC', balance: '320.00', available: '320.00' },
+//   { code: 'XLM', balance: '100.00', available: '95.00' },
+// ]
 
 function PollarBridge({ children }: { children: ReactNode }) {
   const pollar = usePollar()
-  const [demoActive, setDemoActive] = useState(false)
-  const [demoBalances, setDemoBalances] = useState<WalletAssetBalance[]>(DEMO_INITIAL_BALANCES)
+  // const [demoActive, setDemoActive] = useState(false)
+  // const [demoBalances, setDemoBalances] = useState<WalletAssetBalance[]>(DEMO_INITIAL_BALANCES)
 
   useEffect(() => {
     if (pollar.isAuthenticated && pollar.wallet?.address) {
@@ -55,25 +55,25 @@ function PollarBridge({ children }: { children: ReactNode }) {
     pollar.openLoginModal()
   }, [pollar])
 
-  const enterDemoSession = useCallback(() => {
-    setDemoActive(true)
-  }, [])
+  // const enterDemoSession = useCallback(() => {
+  //   setDemoActive(true)
+  // }, [])
 
   const logout = useCallback(() => {
-    if (demoActive) {
-      setDemoActive(false)
-      setDemoBalances(DEMO_INITIAL_BALANCES)
-      return
-    }
+    // if (demoActive) {
+    //   setDemoActive(false)
+    //   setDemoBalances(DEMO_INITIAL_BALANCES)
+    //   return
+    // }
     pollar.logout()
-  }, [demoActive, pollar])
+  }, [pollar])
 
   const refreshBalance = useCallback(async () => {
-    if (demoActive) return
-    if (pollar.isAuthenticated) {
+    // if (demoActive) return
+    if (pollar.isAuthenticated && pollar.wallet?.address) {
       await pollar.refreshWalletBalance()
     }
-  }, [demoActive, pollar])
+  }, [pollar])
 
   const payUsdc = useCallback(
     async ({
@@ -85,18 +85,18 @@ function PollarBridge({ children }: { children: ReactNode }) {
       amount: string
       memo?: string
     }): Promise<{ ok: boolean; hash?: string; error?: string }> => {
-      if (demoActive) {
-        const numericAmount = Number(amount)
-        setDemoBalances((prev) =>
-          prev.map((asset) => {
-            if (asset.code !== 'USDC') return asset
-            const nextVal = Math.max(0, Number(asset.balance) - numericAmount).toFixed(2)
-            return { ...asset, balance: nextVal, available: nextVal }
-          }),
-        )
-        const fakeHash = `demo_${Date.now().toString(16)}`
-        return { ok: true, hash: fakeHash }
-      }
+      // if (demoActive) {
+      //   const numericAmount = Number(amount)
+      //   setDemoBalances((prev) =>
+      //     prev.map((asset) => {
+      //       if (asset.code !== 'USDC') return asset
+      //       const nextVal = Math.max(0, Number(asset.balance) - numericAmount).toFixed(2)
+      //       return { ...asset, balance: nextVal, available: nextVal }
+      //     }),
+      //   )
+      //   const fakeHash = `demo_${Date.now().toString(16)}`
+      //   return { ok: true, hash: fakeHash }
+      // }
 
       try {
         const outcome = await pollar.sendPayment({
@@ -120,11 +120,11 @@ function PollarBridge({ children }: { children: ReactNode }) {
         return { ok: false, error: message }
       }
     },
-    [demoActive, pollar],
+    [pollar],
   )
 
   const balances: WalletAssetBalance[] = useMemo(() => {
-    if (demoActive) return demoBalances
+    // if (demoActive) return demoBalances
     if (pollar.walletBalance.step === 'loaded') {
       return pollar.walletBalance.data.balances.map((item) => ({
         code: item.code,
@@ -133,17 +133,18 @@ function PollarBridge({ children }: { children: ReactNode }) {
       }))
     }
     return []
-  }, [demoActive, demoBalances, pollar.walletBalance])
+  }, [pollar.walletBalance])
 
   const resolvedAddress =
-    demoActive
-      ? DEMO_WALLET_ADDRESS
-      : (pollar.wallet?.address ?? pollar.wallets?.[0]?.address ?? null)
+    // demoActive
+    //   ? DEMO_WALLET_ADDRESS
+    //   :
+    pollar.wallet?.address ?? pollar.wallets?.[0]?.address ?? null
 
   const [isCreatingWallet, setIsCreatingWallet] = useState(false)
 
   const createWallet = useCallback(async () => {
-    if (demoActive || isCreatingWallet) return
+    if (isCreatingWallet) return
     setIsCreatingWallet(true)
     try {
       await pollar.createWallet()
@@ -151,28 +152,27 @@ function PollarBridge({ children }: { children: ReactNode }) {
     } finally {
       setIsCreatingWallet(false)
     }
-  }, [demoActive, isCreatingWallet, pollar])
+  }, [isCreatingWallet, pollar])
 
   const value: AlfioWalletContextValue = useMemo(
     () => ({
-      isAuthenticated: demoActive || pollar.isAuthenticated,
-      isDemoMode: demoActive,
+      isAuthenticated: pollar.isAuthenticated,
+      isDemoMode: false, // demoActive
       hasPollarApiKey: POLLAR_CONFIG.hasValidApiKey,
-      hasWallet: demoActive || pollar.hasWallet || Boolean(resolvedAddress),
+      hasWallet: pollar.hasWallet || Boolean(resolvedAddress),
       isCreatingWallet,
       network: pollar.network || POLLAR_CONFIG.stellarNetwork,
       walletAddress: resolvedAddress,
       balances,
-      isLoadingBalance: !demoActive && pollar.walletBalance.step === 'loading',
+      isLoadingBalance: pollar.walletBalance.step === 'loading',
       openLogin,
-      enterDemoSession,
+      // enterDemoSession,
       createWallet,
       logout,
       refreshBalance,
       payUsdc,
     }),
     [
-      demoActive,
       pollar.isAuthenticated,
       pollar.hasWallet,
       pollar.network,
@@ -181,7 +181,6 @@ function PollarBridge({ children }: { children: ReactNode }) {
       isCreatingWallet,
       balances,
       openLogin,
-      enterDemoSession,
       createWallet,
       logout,
       refreshBalance,

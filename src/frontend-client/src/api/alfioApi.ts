@@ -5,6 +5,7 @@ import {
   RUTA_CATALOGO_PRODUCTOS,
   RUTA_CLIENTE_POR_WALLET,
   RUTA_CONFIRMAR_PAGO_ORDEN,
+  RUTA_CREAR_CLIENTE,
   RUTA_CREAR_CREDITO,
   RUTA_CREAR_ORDEN_STELLAR,
   RUTA_CREDITOS_POR_CLIENTE,
@@ -17,6 +18,7 @@ import {
   RUTA_SSE_ESTADO_ORDEN,
 } from './paths.js'
 import type {
+  ClientProfile,
   CreateCreditPurchaseRequest,
   InstallmentStatus,
   OrderStatusEvent,
@@ -158,6 +160,58 @@ function mapCuotaStatus(estado: string, dueDate: string): InstallmentStatus {
 }
 
 export const alfioApi = {
+  /**
+   * Registra un cliente en el backend Go/Gin: POST /api/v1/clients
+   */
+  async registerClient(profile: ClientProfile): Promise<ClientProfile> {
+    if (isRemoteApiConfigured) {
+      const created = await apiRequest<BackendClientResponse>(RUTA_CREAR_CLIENTE, {
+        method: 'POST',
+        body: JSON.stringify({
+          nombre: profile.nombre.trim(),
+          ci: profile.ci.trim(),
+          telefono: profile.telefono.trim(),
+          direccion_billetera: profile.walletAddress?.trim() || '',
+        }),
+      })
+      return {
+        nombre: created.nombre,
+        ci: created.ci,
+        telefono: created.telefono,
+        walletAddress: created.direccion_billetera,
+      }
+    }
+    return { ...profile }
+  },
+
+  /**
+   * Verifica si la billetera ya está registrada como cliente en la DB:
+   * GET /api/v1/clients/wallet/:wallet
+   */
+  async verifyClientRegistered(walletAddress: string): Promise<ClientProfile | null> {
+    if (!isRemoteApiConfigured) {
+      return {
+        nombre: 'Cliente Demo',
+        ci: '0000000',
+        telefono: '00000000',
+        walletAddress,
+      }
+    }
+    try {
+      const found = await apiRequest<BackendClientResponse>(
+        RUTA_CLIENTE_POR_WALLET(walletAddress),
+      )
+      return {
+        nombre: found.nombre,
+        ci: found.ci,
+        telefono: found.telefono,
+        walletAddress: found.direccion_billetera,
+      }
+    } catch {
+      return null
+    }
+  },
+
   /**
    * Obtiene los productos comprados y las cuotas pendientes del usuario
    * usando las rutas del backend:

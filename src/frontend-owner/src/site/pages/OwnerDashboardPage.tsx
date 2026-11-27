@@ -70,7 +70,10 @@ export function OwnerDashboardPage() {
 
     const unsubscribe = subscribeToOrderPayment(activeOrder.orderId, {
       onPaymentConfirmed: (payment) => {
-        void ownerApi.recordConfirmedSale(payment).then((updated) => {
+        void Promise.all([
+          ownerApi.recordConfirmedSale(payment),
+          wallet.refreshBalance(),
+        ]).then(([updated]) => {
           setDashboard(updated)
           setPaidEvent(payment)
           setAlertPhase('idle')
@@ -80,7 +83,7 @@ export function OwnerDashboardPage() {
     })
 
     return unsubscribe
-  }, [alertPhase, activeOrder])
+  }, [alertPhase, activeOrder, wallet.refreshBalance])
 
   const handleAcceptOrder = async (order: IncomingOrderEvent) => {
     setIsAccepting(true)

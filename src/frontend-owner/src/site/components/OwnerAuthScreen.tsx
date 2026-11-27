@@ -6,14 +6,14 @@ interface OwnerAuthScreenProps {
   hasPollarApiKey: boolean
   onLoginPollar: () => void
   onRegisterWithPollar: (profile: OwnerProfile) => Promise<void>
-  onEnterDemo: (profile?: OwnerProfile) => Promise<void>
+  // onEnterDemo: (profile?: OwnerProfile) => Promise<void>
 }
 
 export function OwnerAuthScreen({
   hasPollarApiKey,
   onLoginPollar,
   onRegisterWithPollar,
-  onEnterDemo,
+  // onEnterDemo,
 }: OwnerAuthScreenProps) {
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [storeName, setStoreName] = useState('')
@@ -174,6 +174,7 @@ export function OwnerAuthScreen({
             </form>
           )}
 
+          {/* Modo demo desactivado temporalmente
           <div className="mt-6 border-t border-neutral-100 pt-5">
             <button
               id="btn-owner-demo-mode"
@@ -193,14 +194,15 @@ export function OwnerAuthScreen({
             >
               Entrar en modo vista previa (sin API key)
             </button>
-
-            {!hasPollarApiKey && (
-              <p className="mt-3 text-center text-xs text-neutral-500">
-                Configura <code className="font-mono text-neutral-700">POLLLAR_KEY</code> en{' '}
-                <code className="font-mono text-neutral-700">.env</code> para usar Pollar en vivo.
-              </p>
-            )}
           </div>
+          */}
+
+          {!hasPollarApiKey && (
+            <p className="mt-4 text-center text-xs text-neutral-500">
+              Configura <code className="font-mono text-neutral-700">POLLAR_KEY</code> en{' '}
+              <code className="font-mono text-neutral-700">.env</code> para usar Pollar en vivo.
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex items-center justify-center gap-2 text-xs text-neutral-500">
