@@ -221,7 +221,15 @@ export function DashboardPage() {
       <BuyNowModal
         open={buyModalOpen}
         walletAddress={wallet.walletAddress}
+        usdcBalance={getUsdcBalance()}
         isSubmitting={isSubmittingPurchase}
+        onInsufficientBalance={() =>
+          setNotice({
+            title: 'Saldo insuficiente',
+            message: 'No tienes saldo suficiente en USDC para solicitar esta compra.',
+            bgColor: '#fef2f2',
+          })
+        }
         onClose={() => setBuyModalOpen(false)}
         onConfirmPurchase={handleConfirmPurchase}
       />

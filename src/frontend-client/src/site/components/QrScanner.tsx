@@ -9,6 +9,7 @@ interface QrScannerProps {
 
 export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
   const elementId = `qr-reader-${useId().replace(/:/g, '')}`
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const onScanRef = useRef(onScanSuccess)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -25,8 +26,45 @@ export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
     setCameraError(null)
     setIsStarting(true)
 
+    const container = containerRef.current
     const scanner = new Html5Qrcode(elementId)
     scannerRef.current = scanner
+
+    const releaseHardwareTracks = () => {
+      const root = container ?? document.getElementById(elementId)
+      if (!root) return
+      const videos = root.querySelectorAll('video')
+      videos.forEach((video) => {
+        const stream = video.srcObject as MediaStream | null
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop())
+          video.srcObject = null
+        }
+      })
+    }
+
+    const stopScanner = () => {
+      if (scanner.isScanning) {
+        void scanner
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            try {
+              scanner.clear()
+            } catch {
+              // Ignorar si el nodo ya se desmontó
+            }
+            releaseHardwareTracks()
+          })
+      } else {
+        try {
+          scanner.clear()
+        } catch {
+          // Ignorar si aún no estaba inicializado
+        }
+        releaseHardwareTracks()
+      }
+    }
 
     scanner
       .start(
@@ -39,6 +77,12 @@ export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
             .stop()
             .catch(() => {})
             .finally(() => {
+              try {
+                scanner.clear()
+              } catch {
+                // Ignorar
+              }
+              releaseHardwareTracks()
               onScanRef.current(decodedText)
             })
         },
@@ -47,7 +91,12 @@ export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
         },
       )
       .then(() => {
-        if (!cancelled) setIsStarting(false)
+        if (cancelled) {
+          // Si el usuario cerró/canceló/cambió de pestaña mientras la cámara arrancaba, la apagamos de inmediato
+          stopScanner()
+          return
+        }
+        setIsStarting(false)
       })
       .catch(() => {
         if (!cancelled) {
@@ -56,13 +105,12 @@ export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
             'No se pudo acceder a la cámara. Permite el permiso o ingresa el código manualmente.',
           )
         }
+        releaseHardwareTracks()
       })
 
     return () => {
       cancelled = true
-      if (scanner.isScanning) {
-        void scanner.stop().catch(() => {})
-      }
+      stopScanner()
       scannerRef.current = null
     }
   }, [active, elementId])
@@ -79,6 +127,7 @@ export function QrScanner({ active, onScanSuccess }: QrScannerProps) {
       ) : (
         <div className="space-y-2">
           <div
+            ref={containerRef}
             id={elementId}
             className="mx-auto min-h-[220px] w-full overflow-hidden rounded-lg bg-neutral-100"
           />

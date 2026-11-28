@@ -8,7 +8,9 @@ import { QrScanner } from './QrScanner'
 interface BuyNowModalProps {
   open: boolean
   walletAddress: string | null
+  usdcBalance: number
   isSubmitting: boolean
+  onInsufficientBalance: () => void
   onClose: () => void
   onConfirmPurchase: (
     product: ProductCatalogItem,
@@ -22,7 +24,9 @@ type OrderApprovalPhase = 'idle' | 'requesting' | 'waiting_store' | 'accepted' |
 export function BuyNowModal({
   open,
   walletAddress,
+  usdcBalance,
   isSubmitting,
+  onInsufficientBalance,
   onClose,
   onConfirmPurchase,
 }: BuyNowModalProps) {
@@ -76,6 +80,13 @@ export function BuyNowModal({
 
   const handleRequestStoreApproval = async () => {
     if (!selectedProduct || !walletAddress) return
+
+    // Verifica saldo antes de enviar cualquier orden o evento SSE a la tienda
+    if (usdcBalance < selectedProduct.downPaymentUsdc) {
+      onInsufficientBalance()
+      return
+    }
+
     clearOrderSubscription()
     setOrderPhase('requesting')
     setOrderNotice(null)
