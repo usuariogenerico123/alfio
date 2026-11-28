@@ -23,6 +23,8 @@ export let RUTA_PERFIL_OWNER_POR_ID = (id) =>
 
 export let RUTA_ANADIR_PRODUCTO = API_URL + '/api/v1/productos'
 export let RUTA_OBTENER_PRODUCTOS = API_URL + '/api/v1/productos'
+export let RUTA_PRODUCTO_POR_ID = (productId) =>
+  API_URL + `/api/v1/productos/${encodeURIComponent(productId)}`
 export let RUTA_PRODUCTOS_POR_TIENDA = (tiendaId) =>
   API_URL + `/api/v1/productos/tienda/${encodeURIComponent(tiendaId)}`
 

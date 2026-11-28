@@ -2,6 +2,7 @@ import '@pollar/react/styles.css'
 import { PollarProvider, usePollar } from '@pollar/react'
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import { ownerApi } from '../api/ownerApi'
 import { POLLAR_OWNER_CONFIG } from './config'
 
 export interface OwnerAssetBalance {
@@ -56,6 +57,19 @@ function PollarOwnerBridge({ children }: { children: ReactNode }) {
     //   return
     // }
     pollar.logout()
+    ownerApi.clearSessionCache()
+    try {
+      for (const store of [localStorage, sessionStorage]) {
+        for (let i = store.length - 1; i >= 0; i--) {
+          const key = store.key(i)
+          if (key && (key.startsWith('pollar:') || key.startsWith('alfio:'))) {
+            store.removeItem(key)
+          }
+        }
+      }
+    } catch {
+      // Ignorar si el navegador restringe acceso a storage
+    }
   }, [pollar])
 
   const refreshBalance = useCallback(async () => {

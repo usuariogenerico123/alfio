@@ -8,6 +8,7 @@ import type {
 import { useAlfioWallet } from '../../pollar'
 import { BuyNowModal } from '../components/BuyNowModal'
 import { Header } from '../components/Header'
+import { NoticeModal } from '../components/NoticeModal'
 import { PendingPaymentsSection } from '../components/PendingPaymentsSection'
 import { PurchasedProductsSection } from '../components/PurchasedProductsSection'
 import { WalletSummary } from '../components/WalletSummary'
@@ -21,6 +22,13 @@ export function DashboardPage() {
   const [isSubmittingPurchase, setIsSubmittingPurchase] = useState(false)
   const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ message: string; bgColor: string; title?: string } | null>(null)
+
+  const getUsdcBalance = (): number => {
+    const usdc = wallet.balances.find((b) => b.code.toUpperCase() === 'USDC')
+    const parsed = Number(usdc?.available ?? usdc?.balance ?? 0)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
 
   const loadPortfolio = useCallback(async () => {
     setIsLoadingData(true)
@@ -29,8 +37,7 @@ export function DashboardPage() {
       setPurchasedProducts(data.purchasedProducts)
       setPendingInstallments(data.pendingInstallments)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error cargando datos'
-      setFeedback({ type: 'err', text: message })
+      console.error('Error cargando portafolio del cliente:', err)
     } finally {
       setIsLoadingData(false)
     }
@@ -45,6 +52,18 @@ export function DashboardPage() {
     order: { orderId: string; memo: string },
   ) => {
     if (!wallet.walletAddress) return
+
+    // Verificador de saldo antes de ejecutar el pago en Pollar
+    const currentUsdc = getUsdcBalance()
+    if (currentUsdc < product.downPaymentUsdc) {
+      setNotice({
+        title: 'Saldo insuficiente',
+        message: 'No tienes saldo suficiente en USDC para realizar este pago.',
+        bgColor: '#fef2f2',
+      })
+      return
+    }
+
     setIsSubmittingPurchase(true)
     setFeedback(null)
 
@@ -56,17 +75,14 @@ export function DashboardPage() {
       })
 
       if (!payment.ok || !payment.hash) {
-        setFeedback({
-          type: 'err',
-          text: payment.error ?? 'No se pudo realizar el pago del 50% inicial en Stellar.',
-        })
+        console.error('Error en el pago Pollar/Stellar:', payment.error ?? 'Sin hash de transacción')
         return
       }
 
       try {
         await alfioApi.confirmStellarOrderPayment(order.orderId, payment.hash)
-      } catch {
-        // Si falla la confirmación directa, el listener de Horizon en el backend actúa como respaldo
+      } catch (err) {
+        console.error('Error confirmando orden en backend (Horizon actúa como respaldo):', err)
       }
 
       await alfioApi.createCreditPurchase({
@@ -81,6 +97,8 @@ export function DashboardPage() {
         type: 'ok',
         text: `Compra confirmada: ${product.name}. Se generaron tus 4 cuotas cada 15 días.`,
       })
+    } catch (err) {
+      console.error('Error inesperado al confirmar compra:', err)
     } finally {
       setIsSubmittingPurchase(false)
     }
@@ -88,6 +106,17 @@ export function DashboardPage() {
 
   const handlePayInstallment = async (installment: PendingInstallment) => {
     if (!wallet.walletAddress) return
+
+    const currentUsdc = getUsdcBalance()
+    if (currentUsdc < installment.amountUsdc) {
+      setNotice({
+        title: 'Saldo insuficiente',
+        message: 'No tienes saldo suficiente en USDC para pagar esta cuota.',
+        bgColor: '#fef2f2',
+      })
+      return
+    }
+
     setPayingInstallmentId(installment.id)
     setFeedback(null)
 
@@ -98,11 +127,8 @@ export function DashboardPage() {
         memo: installment.memo,
       })
 
-      if (!payment.ok) {
-        setFeedback({
-          type: 'err',
-          text: payment.error ?? 'No se pudo completar el pago de la cuota.',
-        })
+      if (!payment.ok || !payment.hash) {
+        console.error('Error pagando cuota en Pollar/Stellar:', payment.error ?? 'Sin hash de transacción')
         return
       }
 
@@ -117,6 +143,8 @@ export function DashboardPage() {
         type: 'ok',
         text: `Cuota ${installment.installmentNumber}/${installment.totalInstallments} de ${installment.productName} pagada.`,
       })
+    } catch (err) {
+      console.error('Error inesperado al pagar cuota:', err)
     } finally {
       setPayingInstallmentId(null)
     }
@@ -196,6 +224,14 @@ export function DashboardPage() {
         isSubmitting={isSubmittingPurchase}
         onClose={() => setBuyModalOpen(false)}
         onConfirmPurchase={handleConfirmPurchase}
+      />
+
+      <NoticeModal
+        open={Boolean(notice)}
+        title={notice?.title}
+        message={notice?.message ?? ''}
+        bgColor={notice?.bgColor}
+        onClose={() => setNotice(null)}
       />
     </div>
   )

@@ -8,6 +8,7 @@ import {
   RUTA_OBTENER_PRODUCTOS,
   RUTA_OBTENER_TIENDAS,
   RUTA_PERFIL_OWNER_POR_WALLET,
+  RUTA_PRODUCTO_POR_ID,
   RUTA_PRODUCTOS_POR_TIENDA,
   RUTA_RECHAZAR_ORDEN,
   RUTA_REGISTRAR_OWNER,
@@ -192,6 +193,14 @@ function computeMetrics(
 
 export const ownerApi = {
   /**
+   * Limpia la caché en memoria de la sesión del dueño al cerrar sesión.
+   */
+  clearSessionCache(): void {
+    activeTiendaId = null
+    activeOwnerWallet = null
+  },
+
+  /**
    * Registra una tienda en el backend Go/Gin: POST /api/v1/tiendas
    */
   async registerOwner(profile: OwnerProfile): Promise<OwnerProfile> {
@@ -317,6 +326,22 @@ export const ownerApi = {
     return {
       product: structuredClone(newProduct),
       productCode,
+    }
+  },
+
+  /**
+   * Elimina un producto en el backend Go/Gin: DELETE /api/v1/productos/:id
+   */
+  async deleteProduct(productId: string): Promise<void> {
+    if (isRemoteApiConfigured) {
+      await apiRequest<void>(RUTA_PRODUCTO_POR_ID(productId), {
+        method: 'DELETE',
+      })
+      return
+    }
+    mockState = {
+      ...mockState,
+      products: mockState.products.filter((p) => p.id !== productId),
     }
   },
 

@@ -66,6 +66,18 @@ function PollarBridge({ children }: { children: ReactNode }) {
     //   return
     // }
     pollar.logout()
+    try {
+      for (const store of [localStorage, sessionStorage]) {
+        for (let i = store.length - 1; i >= 0; i--) {
+          const key = store.key(i)
+          if (key && (key.startsWith('pollar:') || key.startsWith('alfio:'))) {
+            store.removeItem(key)
+          }
+        }
+      }
+    } catch {
+      // Ignorar si el navegador restringe acceso a storage
+    }
   }, [pollar])
 
   const refreshBalance = useCallback(async () => {

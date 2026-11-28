@@ -121,6 +121,11 @@ export function OwnerDashboardPage() {
     return result
   }
 
+  const handleDeleteProduct = async (productId: string) => {
+    await ownerApi.deleteProduct(productId)
+    await loadDashboard()
+  }
+
   const handleSimulateIncomingOrder = () => {
     const sampleProduct = dashboard?.products[0]
     if (!sampleProduct) return
@@ -194,7 +199,10 @@ export function OwnerDashboardPage() {
         )}
 
         {activeSection === 'products' && (
-          <OwnerProductsSection products={dashboard.products} />
+          <OwnerProductsSection
+            products={dashboard.products}
+            onDeleteProduct={handleDeleteProduct}
+          />
         )}
 
         {activeSection === 'add_product' && (
